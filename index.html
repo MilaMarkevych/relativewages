@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Wage Difference Plot</title>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #plot-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+        }
+        #plot {
+            width: 100%;
+            height: 100%;
+        }
+        #image-overlay {
+            position: absolute;
+            top: 0;
+            left: 81px;
+            width: 81.25%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .controls {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .slider-container {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .slider-container input {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .slider-title {
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        .slider-value {
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="plot-container">
+        <div id="plot"></div>
+        <canvas id="image-overlay"></canvas>
+    </div>
+    <div class="controls">
+        <div class="slider-container">
+            <div class="slider-title">Diff in productivity growth rates</div>
+            <input type="range" id="gammaDiff" min="-1" max="1" step="0.001" value="0">
+            <div class="slider-value">γ<sub>h</sub> - γ<sub>e</sub>: <span id="gammaDiffValue">0.000</span></div>
+        </div>
+        <div class="slider-container">
+            <div class="slider-title">Diff in demand growth rates</div>
+            <input type="range" id="lambdaDiff" min="-1" max="1" step="0.001" value="0">
+            <div class="slider-value">λ<sub>h</sub> - λ<sub>e</sub>: <span id="lambdaDiffValue">0.000</span></div>
+        </div>
+    </div>
+    <script>
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = "https://dl.dropboxusercontent.com/scl/fi/kxxg4xce8w4z2no8mewyk/hairdresserstop1.png?rlkey=tk2636l4hskm01nrugz3olxhc&st=lb8hl4it&dl=0";
+
+        img.onload = function() {
+            updatePlot();
+        };
+
+        function calculateWageRatio(t, gammaDiff, lambdaDiff) {
+            const amplificationFactor = 5;
+            const baseRate = 0.02;
+            const gammaH = baseRate * Math.exp(amplificationFactor * gammaDiff);
+            const gammaF = baseRate * Math.exp(-amplificationFactor * gammaDiff);
+            const lambdaH = baseRate * Math.exp(amplificationFactor * lambdaDiff);
+            const lambdaF = baseRate * Math.exp(-amplificationFactor * lambdaDiff);
+            
+            const sigma = 1.5;
+            const alphaRatio = 0.4 / 0.6;
+            const laborRatio = 200 / 100;
+            
+            const firstTerm = Math.pow(alphaRatio, 1 / sigma);
+            const secondTerm = Math.pow(laborRatio, -1 / sigma);
+            const thirdTerm = Math.exp(((gammaF + lambdaF) * t * (sigma - 1)) / sigma);
+            const fourthTerm = Math.exp(((gammaH + lambdaH) * t * (sigma - 1)) / sigma);
+            return 1 / (firstTerm * secondTerm * (thirdTerm / fourthTerm));
+        }
+
+        function updatePlot() {
+            const gammaDiff = parseFloat(document.getElementById('gammaDiff').value);
+            const lambdaDiff = parseFloat(document.getElementById('lambdaDiff').value);
+
+            document.getElementById('gammaDiffValue').textContent = gammaDiff.toFixed(3);
+            document.getElementById('lambdaDiffValue').textContent = lambdaDiff.toFixed(3);
+
+            const t = Array.from({length: 101}, (_, i) => i);
+            const wageRatio = t.map(ti => calculateWageRatio(ti, gammaDiff, lambdaDiff));
+
+            const trace = {
+                x: t,
+                y: wageRatio,
+                mode: 'lines',
+                name: 'Wage Ratio'
+            };
+
+            const layout = {
+                title: {
+                    text: 'Relative Wages of Hairdressers(h) and Engineers(e)',
+                    font: { size: 24 }
+                },
+                xaxis: { 
+                    title: 'Time (t)',
+                    range: [0, 100]
+                },
+                yaxis: { 
+                    title: 'w<sub>h</sub> / w<sub>e</sub>',
+                    autorange: true
+                }
+            };
+
+            Plotly.newPlot('plot', [trace], layout);
+
+            updateImageOverlay(lambdaDiff);
+        }
+
+        function updateImageOverlay(lambdaDiff) {
+            const canvas = document.getElementById('image-overlay');
+            const ctx = canvas.getContext('2d');
+            const opacity = Math.max(0, lambdaDiff);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = opacity;
+
+            if (img.complete && img.naturalHeight !== 0) {
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            }
+
+            ctx.globalAlpha = 1.0;
+        }
+
+        const resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const canvas = document.getElementById('image-overlay');
+                canvas.width = entry.contentRect.width;
+                canvas.height = entry.contentRect.height;
+                updateImageOverlay(parseFloat(document.getElementById('lambdaDiff').value));
+            }
+        });
+
+        resizeObserver.observe(document.getElementById('plot'));
+
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('input', updatePlot);
+        });
+
+        updatePlot();
+    </script>
+</body>
+</html>
